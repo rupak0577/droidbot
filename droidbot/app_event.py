@@ -12,6 +12,7 @@ import time
 from threading import Timer
 from intent import Intent
 from device import DeviceState
+from visualiser import Visualiser
 
 POLICY_NONE = "none"
 POLICY_STATE_RECORDER = "state_recorder"
@@ -874,6 +875,16 @@ class AppEventManager(object):
         """
         self.logger.info("start sending events, policy is %s" % self.policy)
 
+        import SimpleHTTPServer
+        Handler = SimpleHTTPServer.SimpleHTTPRequestHandler
+        Handler.extensions_map.update({
+            '.png': 'image/png',
+        })
+
+        import SocketServer
+        httpd = SocketServer.TCPServer(("", 8000), Handler)
+        httpd.server_activate()
+
         if self.event_duration:
             self.timer = Timer(self.event_duration, self.stop)
             self.timer.start()
@@ -908,6 +919,7 @@ class AppEventManager(object):
             pass
 
         self.stop()
+        httpd.server_close()
         self.dump()
         self.logger.info("finish sending events, saved to droidbot_event.json")
 
@@ -1525,10 +1537,19 @@ class AppModel(object):
         self.node2states = {}
         self.edge2events = {}
 
+        self.states_dir_path = os.path.join(self.device.output_dir, "states")
+        self.vis = Visualiser()
+
     def add_transition(self, event_str, old_state, new_state):
         old_node = self.state_to_node(old_state)
         new_node = self.state_to_node(new_state)
         self.add_edge(event_str, old_node, new_node)
+
+        # Add node to visualiser
+        state_snapshot = [fi for fi in os.listdir(self.states_dir_path) if fi.endswith('.png')
+                          and new_state.tag in fi]
+
+        self.vis.add_node(new_state.tag, event_str, state_snapshot[0])
 
     def state_to_node(self, state):
         if state is None:
