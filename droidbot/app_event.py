@@ -9,6 +9,7 @@ import os
 import random
 import subprocess
 import time
+from collections import OrderedDict
 from threading import Timer
 from intent import Intent
 from device import DeviceState
@@ -1519,8 +1520,12 @@ class AppModel(object):
     """
 
     def __init__(self, device, app):
+        self.logger = logging.getLogger('AppModel')
+
         self.device = device
         self.app = app
+        self.events_dict = OrderedDict()
+        self.event_count = 0
 
         self.node2states = {}
         self.edge2events = {}
@@ -1528,6 +1533,10 @@ class AppModel(object):
     def add_transition(self, event_str, old_state, new_state):
         old_node = self.state_to_node(old_state)
         new_node = self.state_to_node(new_state)
+
+        self.events_dict['event_' + str(self.event_count)] = {'from': old_node, 'to': new_node, 'event_str': event_str
+                                                    if event_str != None else 'none'}
+        self.event_count += 1
         self.add_edge(event_str, old_node, new_node)
 
     def state_to_node(self, state):
@@ -1548,6 +1557,13 @@ class AppModel(object):
             self.edge2events[edge_str] = []
         self.edge2events[edge_str].append(event_str)
 
+    def dump(self):
+        appmodel_file = open(os.path.join(self.device.output_dir, "appmodel_dump.json"), "w")
+        appmodel_dict = {'states' : self.node2states, 'events' : self.events_dict}
+        json.dump(appmodel_dict, appmodel_file, indent=2)
+        appmodel_file.close()
+
+        self.logger.info("Dumped AppModel to appmodel_dump.json")
 
 class UtgDynamicFactory(StateBasedEventFactory):
     """
@@ -1717,6 +1733,7 @@ class UtgDynamicFactory(StateBasedEventFactory):
         json.dump(utg.data, utg_file, indent=2)
         utg_file.close()
 
+        self.app_model.dump()
 
 class ScriptEventFactory(EventFactory):
     """
